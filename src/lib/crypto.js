@@ -201,30 +201,3 @@ export async function importPublicKey(publicKeyBase64) {
 
   return publicKey;
 }
-export async function verifyRSAKeyPair(publicKey, privateKey) {
-  const testData = new TextEncoder().encode(
-    'RSA key pair verification test'
-  );
-
-  const encrypted = await window.crypto.subtle.encrypt(
-    {
-      name: 'RSA-OAEP',
-    },
-    publicKey,
-    testData
-  );
-
-  const decrypted = await window.crypto.subtle.decrypt(
-    {
-      name: 'RSA-OAEP',
-    },
-    privateKey,
-    encrypted
-  );
-
-  const decryptedText = new TextDecoder().decode(
-    decrypted
-  );
-
-  return decryptedText === 'RSA key pair verification test';
-}

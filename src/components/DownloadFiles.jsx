@@ -4,8 +4,6 @@ import {
   getPrivateKey,
   decryptAESKey,
   decryptFile,
-  importPublicKey,
-  verifyRSAKeyPair,
 } from '../lib/crypto';
 
 function base64ToArrayBuffer(base64) {
@@ -64,33 +62,6 @@ function DownloadFiles({ user }) {
           'Private key not found on this device.'
         );
       }
-      // Verify that the local private key matches
-// the public key stored in Supabase.
-const { data: keyRecord, error: keyError } =
-  await supabase
-    .from('user_keys')
-    .select('public_key')
-    .eq('user_id', user.id)
-    .single();
-
-if (keyError) {
-  throw keyError;
-}
-
-const publicKey = await importPublicKey(
-  keyRecord.public_key
-);
-
-const keysMatch = await verifyRSAKeyPair(
-  publicKey,
-  privateKey
-);
-
-if (!keysMatch) {
-  throw new Error(
-    'RSA public and private keys do not match.'
-  );
-}
 
       // 2. Download encrypted file from Supabase Storage
       const { data: encryptedBlob, error: downloadError } =
