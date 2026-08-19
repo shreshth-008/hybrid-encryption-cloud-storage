@@ -42,25 +42,23 @@ function FileUpload({ user }) {
     try {
       setStatus('Preparing secure upload...');
 
-      // 1. Get user's public RSA key
-      const { data: keyRecord, error: keyError } = await supabase
-        .from('user_keys')
-        .select('public_key')
-        .eq('user_id', user.id)
-        .single();
+      const { data: keyRecord, error: keyError } =
+        await supabase
+          .from('user_keys')
+          .select('public_key')
+          .eq('user_id', user.id)
+          .single();
 
       if (keyError) {
         throw keyError;
       }
 
-      // 2. Convert stored public key into CryptoKey
       const publicKey = await importPublicKey(
         keyRecord.public_key
       );
 
       setStatus('Encrypting file locally...');
 
-      // 3. Encrypt file using AES-256-GCM
       const {
         encryptedData,
         aesKey,
@@ -69,22 +67,18 @@ function FileUpload({ user }) {
 
       setStatus('Encrypting AES session key...');
 
-      // 4. Protect AES session key using RSA-OAEP
       const encryptedAESKey = await encryptAESKey(
         aesKey,
         publicKey
       );
 
-      // 5. Generate a unique file ID
       const fileId = crypto.randomUUID();
 
-      // 6. Store encrypted file inside user's own folder
       const storagePath =
         `${user.id}/${fileId}.enc`;
 
       setStatus('Uploading encrypted file...');
 
-      // 7. Convert encrypted ArrayBuffer to Blob
       const encryptedBlob = new Blob(
         [encryptedData],
         {
@@ -92,35 +86,42 @@ function FileUpload({ user }) {
         }
       );
 
-      // 8. Upload ONLY encrypted data
-      const { error: uploadError } = await supabase.storage
-        .from('encrypted-files')
-        .upload(storagePath, encryptedBlob, {
-          contentType: 'application/octet-stream',
-          upsert: false,
-        });
+      const { error: uploadError } =
+        await supabase.storage
+          .from('encrypted-files')
+          .upload(
+            storagePath,
+            encryptedBlob,
+            {
+              contentType:
+                'application/octet-stream',
+              upsert: false,
+            }
+          );
 
       if (uploadError) {
         throw uploadError;
       }
 
-      setStatus('Saving encrypted file metadata...');
+      setStatus(
+        'Saving encrypted file metadata...'
+      );
 
-      // 9. Store encrypted AES key + IV + metadata
-      const { error: metadataError } = await supabase
-        .from('files')
-        .insert({
-          user_id: user.id,
-          file_name: selectedFile.name,
-          file_size: selectedFile.size,
-          storage_path: storagePath,
-          encrypted_aes_key:
-            arrayBufferToBase64(encryptedAESKey),
-          iv: arrayBufferToBase64(iv),
-        });
+      const { error: metadataError } =
+        await supabase
+          .from('files')
+          .insert({
+            user_id: user.id,
+            file_name: selectedFile.name,
+            file_size: selectedFile.size,
+            storage_path: storagePath,
+            encrypted_aes_key:
+              arrayBufferToBase64(
+                encryptedAESKey
+              ),
+            iv: arrayBufferToBase64(iv),
+          });
 
-      // If metadata insertion fails, remove the uploaded object
-      // so we don't leave an orphaned encrypted file.
       if (metadataError) {
         await supabase.storage
           .from('encrypted-files')
@@ -135,7 +136,10 @@ function FileUpload({ user }) {
 
       setSelectedFile(null);
     } catch (error) {
-      console.error('Secure upload error:', error);
+      console.error(
+        'Secure upload error:',
+        error
+      );
 
       setStatus(
         `Upload failed: ${error.message}`
@@ -144,28 +148,100 @@ function FileUpload({ user }) {
   }
 
   return (
-    <div>
-      <h2>Secure File Upload</h2>
+    <div className="upload-card">
 
-      <input
-        type="file"
-        onChange={handleFileChange}
-      />
+      <div className="upload-icon">
+        🔐
+      </div>
 
-      {selectedFile && (
+      <div className="upload-content">
+        <h3>Secure File Upload</h3>
+
         <p>
-          Selected file: {selectedFile.name}
+          Choose a file to encrypt and securely
+          store it in your private cloud.
         </p>
-      )}
 
-      <button
-        onClick={handleUpload}
-        disabled={!selectedFile}
-      >
-        Upload Securely
-      </button>
+        <label className="file-drop-zone">
+          <input
+            type="file"
+            onChange={handleFileChange}
+          />
 
-      {status && <p>{status}</p>}
+          <div className="upload-cloud-icon">
+            ↑
+          </div>
+
+          <strong>
+            {selectedFile
+              ? selectedFile.name
+              : 'Choose a file to encrypt'}
+          </strong>
+
+          <span>
+            Your file is encrypted before upload
+          </span>
+
+          <div className="browse-button">
+            Browse files
+          </div>
+        </label>
+
+        {selectedFile && (
+          <div className="selected-file">
+            <div className="selected-file-icon">
+              📄
+            </div>
+
+            <div className="selected-file-info">
+              <strong>
+                {selectedFile.name}
+              </strong>
+
+              <span>
+                {(
+                  selectedFile.size / 1024
+                ).toFixed(1)} KB
+              </span>
+            </div>
+
+            <span className="selected-file-status">
+              Ready
+            </span>
+          </div>
+        )}
+
+        <button
+          className="secure-upload-button"
+          onClick={handleUpload}
+          disabled={!selectedFile}
+        >
+          <span>🔒</span>
+          Upload securely
+        </button>
+
+        {status && (
+          <div
+            className={`upload-status ${
+              status.includes('failed') ||
+              status.includes('Please')
+                ? 'upload-status-error'
+                : ''
+            }`}
+          >
+            <span>•</span>
+            {status}
+          </div>
+        )}
+      </div>
+
+      <div className="upload-security-note">
+        <span>🔒</span>
+        <span>
+          AES-256-GCM encryption •
+          Client-side processing
+        </span>
+      </div>
     </div>
   );
 }
