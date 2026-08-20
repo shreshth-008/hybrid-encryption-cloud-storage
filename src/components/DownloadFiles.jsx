@@ -34,7 +34,9 @@ function DownloadFiles({ user }) {
 
       const { data, error } = await supabase
         .from('files')
-        .select('*')
+        .select(
+  'id,file_name,file_size,storage_path,encrypted_aes_key,iv,uploaded_at'
+)
         .eq('user_id', user.id)
         .order('uploaded_at', {
           ascending: false,
@@ -53,8 +55,8 @@ function DownloadFiles({ user }) {
       );
 
       setStatus(
-        `Failed to load files: ${error.message}`
-      );
+  'Failed to load files. Please try again.'
+);
     }
   }
 
@@ -175,8 +177,8 @@ function DownloadFiles({ user }) {
       );
 
       setStatus(
-        `Download failed: ${error.message}`
-      );
+  'Download failed. Please try again.'
+);
     }
   }
 

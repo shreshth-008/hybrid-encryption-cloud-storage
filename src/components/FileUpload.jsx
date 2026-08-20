@@ -6,6 +6,17 @@ import {
   importPublicKey,
 } from '../lib/crypto';
 
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
+function sanitizeFileName(fileName) {
+  return fileName
+    .normalize('NFC')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .replace(/[\\/]/g, '_')
+    .trim()
+    .slice(0, 255) || 'encrypted-file';
+}
+
 function arrayBufferToBase64(buffer) {
   const bytes = new Uint8Array(buffer);
 
@@ -29,6 +40,13 @@ function FileUpload({ user }) {
       return;
     }
 
+    if (file.size > MAX_FILE_SIZE) {
+      setSelectedFile(null);
+      setStatus('File is too large. Maximum size is 100 MB.');
+      event.target.value = '';
+      return;
+    }
+
     setSelectedFile(file);
     setStatus('');
   }
@@ -36,6 +54,11 @@ function FileUpload({ user }) {
   async function handleUpload() {
     if (!selectedFile) {
       setStatus('Please select a file first.');
+      return;
+    }
+
+    if (selectedFile.size > MAX_FILE_SIZE) {
+      setStatus('File is too large. Maximum size is 100 MB.');
       return;
     }
 
@@ -51,6 +74,10 @@ function FileUpload({ user }) {
 
       if (keyError) {
         throw keyError;
+      }
+
+      if (!keyRecord?.public_key) {
+        throw new Error('Public encryption key is unavailable.');
       }
 
       const publicKey = await importPublicKey(
@@ -76,6 +103,9 @@ function FileUpload({ user }) {
 
       const storagePath =
         `${user.id}/${fileId}.enc`;
+
+      const safeFileName =
+        sanitizeFileName(selectedFile.name);
 
       setStatus('Uploading encrypted file...');
 
@@ -112,7 +142,7 @@ function FileUpload({ user }) {
           .from('files')
           .insert({
             user_id: user.id,
-            file_name: selectedFile.name,
+            file_name: safeFileName,
             file_size: selectedFile.size,
             storage_path: storagePath,
             encrypted_aes_key:
@@ -123,9 +153,16 @@ function FileUpload({ user }) {
           });
 
       if (metadataError) {
-        await supabase.storage
-          .from('encrypted-files')
-          .remove([storagePath]);
+        try {
+          await supabase.storage
+            .from('encrypted-files')
+            .remove([storagePath]);
+        } catch (cleanupError) {
+          console.error(
+            'Encrypted file cleanup failed:',
+            cleanupError
+          );
+        }
 
         throw metadataError;
       }
@@ -142,7 +179,7 @@ function FileUpload({ user }) {
       );
 
       setStatus(
-        `Upload failed: ${error.message}`
+        'Upload failed. Please try again.'
       );
     }
   }
@@ -224,7 +261,8 @@ function FileUpload({ user }) {
           <div
             className={`upload-status ${
               status.includes('failed') ||
-              status.includes('Please')
+              status.includes('Please') ||
+              status.includes('too large')
                 ? 'upload-status-error'
                 : ''
             }`}
